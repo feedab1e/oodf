@@ -1,0 +1,7 @@
+set(CMAKE_CXX_COMPILER @JSBIND_COMPILER_WRAPPER@)
+set(CMAKE_CXX_COMPILER_ID Clang)
+set(CMAKE_CXX_FLAGS "--target=wasm32-unknown-wasi -Wl,--unresolved-symbols=import-dynamic -fno-exceptions")
+#set(CMAKE_MAKE_PROGRAM make)
+set(CMAKE_SYSTEM_NAME Generic)
+set(CMAKE_SYSTEM_PROCESSOR wasm32)
+set(CMAKE_SYSROOT /usr/share/wasi-sysroot)

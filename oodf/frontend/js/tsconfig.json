@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "strict": true,
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2015",
+      "ES2016",
+      "ES2017",
+      "ES2018",
+      "ES2019",
+      "ES2020",
+      "ES2021",
+      "ES2022",
+      "ES2023",
+      "ESNext"
+    ],
+    "module": "amd",
+    "sourceMap": true,
+    "outFile": "../build/frontend",
+    "allowJs": true
+  },
+  "include": ["types/**/*", "./loader.ts", "*.ts"]
+}
