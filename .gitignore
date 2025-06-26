@@ -1,4 +1,5 @@
 *
 !*/
-!.gitignore
-!oodf/**
+!/.gitignore
+!/Makefile
+!/oodf/**
