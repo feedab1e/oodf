@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.json",
+  "outDir": "../../../build/js/jsbind",
+  "include": ["types/**/*", "./loader.ts", "*.ts"]
+}
