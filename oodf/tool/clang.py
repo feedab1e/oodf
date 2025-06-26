@@ -2,6 +2,7 @@
 
 import subprocess
 import sys
+import os
 
 outfile=""
 plugin='@JSBIND_PLUGIN_PATH@'
@@ -18,18 +19,22 @@ for arg in sys.argv:
         if arg == '-o':
             is_out = True
 
-subprocess.run([
+c = subprocess.run([
     'clang++',
     f"-fplugin={plugin}",
     f"-fplugin-arg-jsbind-out-file-path={outfile}data"
-    ] + sys.argv[1:]).check_returncode()
+] + sys.argv[1:])
+if c != 0:
+    os._exit(c.returncode)
 
 if is_c:
-    subprocess.run([
+    c = subprocess.run([
         'llvm-objcopy',
         '--keep-undefined',
         '--add-section',
         f'.custom.jsbind={outfile}data',
         outfile
     ]).check_returncode()
+    if c != 0:
+        os._exit(c.returncode)
 

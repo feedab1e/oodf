@@ -17,6 +17,9 @@
 #include <fstream>
 #include <ranges>
 namespace {
+
+bool trace = 0;
+
 struct diags {
   clang::DiagnosticsEngine *de;
   unsigned unknown_argument;
@@ -58,7 +61,8 @@ struct jsbind_consume: clang::SemaConsumer {
   auto has_appropriate_attr(clang::FunctionDecl *d) -> decltype(std::ranges::begin(d->getAttrs())) {
     return std::ranges::find_if(d->getAttrs(), [d, this](const clang::Attr *att) {
         if (auto an = dyn_cast<clang::AnnotateAttr>(att)) {
-          std::println(std::cerr, "name: {}", make_human_name(d));
+          if(trace)
+            std::println(std::cerr, "name: {}", make_human_name(d));
           auto name = an->getAnnotation();
           if(name == "__jsbind" || name == "__jsbind_dep")
             return true;
@@ -152,7 +156,8 @@ struct jsbind_consume: clang::SemaConsumer {
       for(auto &&dep: deps) {
         write(dep);
       }
-      std::println(std::cerr, "\"{}\", \"{}\"", *str, size(deps));
+      if(trace)
+        std::println(std::cerr, "\"{}\", \"{}\"", *str, size(deps));
     }
   }
 
@@ -224,9 +229,12 @@ struct jsbind_consume: clang::SemaConsumer {
       constexpr static char file_path_arg[] = "out-file-path=";
       bool fail = false;
       for (std::string_view arg: args) {
-        std::println("file:{}", arg);
+        if (arg == "trace")
+          trace = 1;
         if (arg.starts_with(file_path_arg)) {
           arg.remove_prefix(sizeof file_path_arg - 1);
+          if(trace)
+            std::println("file:{}", arg);
           out_path = arg;
         }
         else {
