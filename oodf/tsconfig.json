@@ -18,8 +18,10 @@
     ],
     "module": "amd",
     "sourceMap": true,
-    "outFile": "../build/frontend",
-    "allowJs": true
-  },
-  "include": ["types/**/*", "./loader.ts", "*.ts"]
+    "typeRoots": ["./frontend/@types/"],
+    "paths": {
+      "jsbind/*": ["./frontend/jsbind/*"]
+    },
+    "outDir": "./../build/js"
+  }
 }
