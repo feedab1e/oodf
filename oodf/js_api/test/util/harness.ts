@@ -10,6 +10,7 @@ const wasmExperiment = async () => {
   let mod = await WebAssembly.compileStreaming(fs.promises.readFile(f, {encoding: null}).then(goyda));
   let jsbind = new JsBindCtx(mod);
   let env = jsbind.getBindings();
+  console.log(env);
   let instance = await WebAssembly.instantiate(mod, {jsbind: env});
   jsbind.patchRefs(
     instance.exports.memory as WebAssembly.Memory,

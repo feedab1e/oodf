@@ -15,4 +15,4 @@ target_sources(js_api
 file(GLOB_RECURSE srcs CONFIGURE_DEPENDS impl/*.cpp dom/*.cpp)
 target_sources(js_api PUBLIC ${srcs})
 
-add_subdirectory(test)
+add_subdirectory(test/util)
