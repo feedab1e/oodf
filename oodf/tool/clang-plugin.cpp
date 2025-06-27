@@ -11,6 +11,13 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
+
+#include "llvm/IR/Module.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/Passes/OptimizationLevel.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Support/raw_ostream.h"
+
 #include <ranges>
 #include <print>
 #include <iostream>
@@ -23,7 +30,6 @@ bool trace = 0;
 struct diags {
   clang::DiagnosticsEngine *de;
   unsigned unknown_argument;
-  unsigned missing_out_file;
   unsigned arg_non_expr;
   unsigned body_not_string;
   unsigned dep_not_global_lvalue;
@@ -36,15 +42,16 @@ struct defer{
   }
 };
 
+
 struct jsbind_consume: clang::SemaConsumer {
-  std::ofstream out_file;
+  std::shared_ptr<std::stringstream> out_file = std::make_shared<std::stringstream>();
   std::string data;
   clang::Sema *s;
   std::optional<clang::PrintingPolicy> human_fn_name;
   clang::QualType str_type;
   std::unique_ptr<clang::ItaniumMangleContext> mangle_ctx;
 
-  jsbind_consume(std::ofstream path, diags diag): out_file(std::move(path)) {}
+  jsbind_consume(std::ofstream path, diags diag){}
 
   void InitializeSema(clang::Sema &s) override {
     this->s = &s;
@@ -79,12 +86,12 @@ struct jsbind_consume: clang::SemaConsumer {
   }
 
   void write(uint32_t v) {
-    out_file.write((const char *)&v, sizeof v);
+    out_file->write((const char *)&v, sizeof v);
   }
   void write(std::string_view v) {
     size_t sz = size(v);
     write(sz);
-    out_file.write(v.data(), sz);
+    out_file->write(v.data(), sz);
   }
 
   clang::NamedDecl *evaluate_decl(clang::Expr *e) {
@@ -136,6 +143,7 @@ struct jsbind_consume: clang::SemaConsumer {
       fail = true;
     }
     auto name = mangle(d);
+    d->addAttr(clang::WebAssemblyImportNameAttr::Create(s->Context, name));
     auto deps_rg = 
       attr->args()
       | std::views::drop(1)
@@ -169,12 +177,8 @@ struct jsbind_consume: clang::SemaConsumer {
 
   bool HandleTopLevelDecl(clang::DeclGroupRef dg) override {
     for (auto decl: dg) {
-      //if (auto *dn = dyn_cast<clang::NamedDecl>(decl))
-        //std::println(std::cerr, "completeme: {}", make_human_name(dn));
       if (auto *dn = dyn_cast<clang::NamespaceDecl>(decl)) {
-        //std::println(std::cerr, "here");
         if (!dn->hasBody()) continue;
-        //std::println(std::cerr, "here!!");
         
         auto body = dyn_cast<clang::CompoundStmt>(dn->getBody());
         for(auto stmt: body->body())
@@ -198,9 +202,23 @@ struct jsbind_consume: clang::SemaConsumer {
   void CompleteExternalDeclaration(clang::DeclaratorDecl *dg) override {
     auto *d = dyn_cast<clang::FunctionDecl>(dg);
     if(!d) return;
-    //std::println(std::cerr, "completeme: {}", make_human_name(d));
     handle(d);
   }
+  struct inject_wasm_section: llvm::AnalysisInfoMixin<inject_wasm_section> {
+    std::shared_ptr<std::stringstream> data;
+    inject_wasm_section(std::shared_ptr<std::stringstream> data): data(std::move(data)){}
+    using Result = llvm::PreservedAnalyses;
+    Result run(llvm::Module &M, llvm::ModuleAnalysisManager &MAM) {
+      auto &ctx = M.getContext();
+      auto operand = llvm::MDString::get(ctx, llvm::StringRef{data->str()});
+      auto name = llvm::MDString::get(ctx, ".custom.jsbind");
+      std::array<llvm::Metadata *, 2> ops{name, operand};
+      auto nd = M.getOrInsertNamedMetadata("wasm.custom_sections");
+      nd->addOperand(llvm::MDTuple::get(ctx, ops));
+      return llvm::PreservedAnalyses::all();
+    }
+    static constexpr bool isRequired() { return true; }
+  };
 
   struct action: clang::PluginASTAction {
     std::string out_path;
@@ -208,7 +226,13 @@ struct jsbind_consume: clang::SemaConsumer {
     std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(
       clang::CompilerInstance &CI, llvm::StringRef
     ) override {
-      return std::make_unique<jsbind_consume>(std::ofstream{out_path, std::ios::binary | std::ios::trunc}, diag);
+      auto jsbind = std::make_unique<jsbind_consume>(std::ofstream{out_path, std::ios::binary | std::ios::trunc}, diag);
+      CI.getCodeGenOpts().PassBuilderCallbacks.push_back([c=jsbind->out_file](llvm::PassBuilder &pb){
+        pb.registerPipelineStartEPCallback([c](llvm::ModulePassManager &mpm, llvm::OptimizationLevel) {
+          mpm.addPass(jsbind_consume::inject_wasm_section{c});
+        });
+      });
+      return std::unique_ptr<clang::ASTConsumer>(std::move(jsbind));
     }
     PluginASTAction::ActionType getActionType() override {
       return AddBeforeMainAction;
@@ -221,7 +245,6 @@ struct jsbind_consume: clang::SemaConsumer {
 
       diag.de = &inst.getDiagnostics();
       diag.unknown_argument = diag.de->getCustomDiagID(DE::Error, "unknown argument: %0");
-      diag.missing_out_file = diag.de->getCustomDiagID(DE::Error, "metadata putput file is missing");
       diag.arg_non_expr = diag.de->getCustomDiagID(DE::Error, "argument must be an expression but parsed as an identifier");
       diag.body_not_string = diag.de->getCustomDiagID(DE::Error, "JavaScript body is not a null-terminated string");
       diag.dep_not_global_lvalue = diag.de->getCustomDiagID(DE::Error, "JavaScript body cannot depend on non-globals");
@@ -231,20 +254,10 @@ struct jsbind_consume: clang::SemaConsumer {
       for (std::string_view arg: args) {
         if (arg == "trace")
           trace = 1;
-        if (arg.starts_with(file_path_arg)) {
-          arg.remove_prefix(sizeof file_path_arg - 1);
-          if(trace)
-            std::println("file:{}", arg);
-          out_path = arg;
-        }
         else {
           diag.de->Report(diag.unknown_argument) << arg;
           fail = true;
         }
-      }
-      if (out_path == "") {
-        diag.de->Report(diag.missing_out_file);
-        fail = true;
       }
       return !fail;
     }
