@@ -25,3 +25,4 @@ endfunction()
 
 add_test_file(../basic.cpp)
 add_test_file(../fail.cpp FAIL)
+add_test_file(../function.cpp)

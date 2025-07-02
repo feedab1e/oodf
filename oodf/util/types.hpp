@@ -20,6 +20,7 @@ template<class T>
 struct fn_traits;
 template<class R, class ...Args>
 struct fn_traits<R(Args ...)> {
+  typedef R fn_type(Args ...);
   constexpr static auto arg_types = [](auto fs){
     return fs(std::declval<Args>()...);
   };
@@ -27,6 +28,7 @@ struct fn_traits<R(Args ...)> {
 };
 template<class R, class ...Args>
 struct fn_traits<R(Args ...) const> {
+  typedef R fn_type(Args ...);
   constexpr static auto arg_types = [](auto fs){
     return fs(std::declval<Args>()...);
   };

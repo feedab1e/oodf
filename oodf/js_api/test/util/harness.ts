@@ -11,6 +11,10 @@ const wasmExperiment = async () => {
   let jsbind = new JsBindCtx(mod);
   let env = jsbind.getBindings();
   console.log(env);
+  for (let imp of WebAssembly.Module.imports(mod)) {
+    if(imp.module == 'env')
+      console.error(imp.name);
+  }
   let instance = await WebAssembly.instantiate(mod, {jsbind: env});
   jsbind.patchRefs(
     instance.exports.memory as WebAssembly.Memory,

@@ -1,7 +1,7 @@
 all: frontend
 
 test: frontend
-	cmake --build build/frontend --target test_basic --target test_fail
+	cmake --build build/frontend --target test_basic --target test_fail --target test_function
 	ctest --test-dir build/frontend --rerun-failed --output-on-failure 
 
 frontend: tool
@@ -11,7 +11,7 @@ frontend: tool
 
 tool:
 	cmake -B build/tool -S oodf
-	cmake --build build/tool --target jsbind
+	cmake --build build/tool --target jsbind -v
 
 clean:
 	rm -rf build
