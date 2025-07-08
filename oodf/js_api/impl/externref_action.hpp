@@ -26,11 +26,9 @@ struct externref_action {
   }
   template<auto ptrmem, js::binds::js_type R, auto data = get_fn_text<ptrmem>()>
   [[jsbind::jsbind((&*data.data))]]
-  [[clang::import_module("jsbind")]]
   static R get_fn(__externref_t);
   template<auto ptrmem, js::binds::js_type R, auto data = set_fn_text<ptrmem>()>
   [[jsbind::jsbind((&*data.data))]]
-  [[clang::import_module("jsbind")]]
   static void set_fn(__externref_t, R);
 
   template<class T, auto ptrmem>

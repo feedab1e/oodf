@@ -5,7 +5,6 @@
   "console.error(s);\n"
   "process.exit(1);\n"
 "}")]]
-[[clang::import_module("jsbind")]]
 void throw_(__externref_t);
 
 void assert(bool b, std::string_view s) {

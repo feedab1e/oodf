@@ -10,7 +10,7 @@ frontend: tool
 	cp build/frontend/compile_commands.json compile_commands.json
 
 tool:
-	cmake -B build/tool -S oodf
+	cmake -B build/tool -S oodf -DCMAKE_BUILD_TYPE=Debug
 	cmake --build build/tool --target jsbind -v
 
 clean:

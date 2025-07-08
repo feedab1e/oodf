@@ -19,15 +19,12 @@ struct html_canvas: html_element {
 struct document: oodf::js::externref {
   template<class = int>
   [[jsbind::jsbind("()=>(document)=>document.children()")]]
-  [[clang::import_module("jsbind")]]
   static __externref_t children(__externref_t);
   template<class = int>
   [[jsbind::jsbind("()=>(document, elem)=>document.appendChild(elem)")]]
-  [[clang::import_module("jsbind")]]
   static __externref_t appendChild(__externref_t, __externref_t);
   template<class = int>
   [[jsbind::jsbind("()=>(document, elem)=>document.createElement(elem)")]]
-  [[clang::import_module("jsbind")]]
   static __externref_t createElement(__externref_t, __externref_t);
   oodf::js::array<element> children() { return children(*this); }
   oodf::js::array<element> appendChild(element e) { return appendChild(*this, e); }
@@ -47,14 +44,12 @@ static_assert(sizeof(document) == sizeof(oodf::js::externref));
 
 template<class = int>
 [[jsbind::jsbind("()=>()=>document")]]
-[[clang::import_module("jsbind")]]
 extern __externref_t js_fn();
 document this_document {[]{
     return js_fn();
 }()};
 
 [[jsbind::jsbind("()=>console.log")]]
-[[clang::import_module("jsbind")]]
 void print(oodf::js::binds::js_type auto ...);
 
 void console_log(auto ...xs) {

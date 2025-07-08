@@ -91,40 +91,32 @@ namespace binds {
 
 template<class = int>
 [[jsbind::jsbind("()=>(obj, idx)=>obj[idx]")]]
-[[clang::import_module("jsbind")]]
 __externref_t get_externref_idx(__externref_t, __externref_t);
 
 template<class = int>
 [[jsbind::jsbind("()=>(obj, idx, value)=>{ obj[idx] = value }")]]
-[[clang::import_module("jsbind")]]
 __externref_t set_externref_idx(__externref_t, __externref_t, __externref_t);
 
 template<class = int>
 [[jsbind::jsbind("()=>(beg, size)=>new TextDecoder().decode(new DataView(memory.data.buffer, beg, size))")]]
-[[clang::import_module("jsbind")]]
 __externref_t decode_string(const char *, int);
 
 template<class = int>
 [[jsbind::jsbind("()=>(string)=>new TextEncoder().encode(string)")]]
-[[clang::import_module("jsbind")]]
 __externref_t encode_string_to_buf(__externref_t str);
 template<class = int>
 [[jsbind::jsbind("()=>(buf)=>buf.byteLength")]]
-[[clang::import_module("jsbind")]]
 int encode_string_buf_size(__externref_t buf);
 template<class = int>
 [[jsbind::jsbind("()=>(buf, ptr)=>new Uint8Array(memory.data.buffer).set(buf, ptr)")]]
-[[clang::import_module("jsbind")]]
 void encode_string_buf_copy(__externref_t buf, char *ptr);
 
 template<class R = int>
 [[jsbind::jsbind("()=>(b)=>new Number(b)")]]
-[[clang::import_module("jsbind")]]
 __externref_t decode_int(R);
 
 template<class R = int>
 [[jsbind::jsbind("()=>(b)=>b")]]
-[[clang::import_module("jsbind")]]
 R encode_int(__externref_t);
 
 template<js_type value_t = __externref_t, js_type idx_t = int>
@@ -256,7 +248,6 @@ namespace binds {
 
 template<js_type ...args>
 [[jsbind::jsbind("()=>(...arr)=>arr")]]
-[[clang::import_module("jsbind")]]
 __externref_t create_array(args ...);
 }
 
@@ -282,13 +273,11 @@ class destructor_registry: externref {
   [[jsbind::jsbind(
     "()=>(r, obj, addr)=>r.register(obj, addr)"
   )]]
-  [[clang::import_module("jsbind")]]
   static void reg(__externref_t, __externref_t, T *) noexcept;
   template<int = 0>
   [[jsbind::jsbind(
     "()=>(destroy)=>new FinalizationRegistry(memory.table.get(destroy))"
   )]]
-  [[clang::import_module("jsbind")]]
   static __externref_t create_registry(void(*)(T *)) noexcept;
 public:
   destructor_registry(): externref{create_registry([](T *v){destroy(v);})} {}
@@ -334,12 +323,10 @@ private:
   
   template<class T = void>
   [[jsbind::jsbind("()=>(addr, fn)=>(...args)=>memory.table.get(fn)(addr, ...args)")]]
-  [[clang::import_module("jsbind")]]
   static __externref_t create_js(erased *, R(*)(erased *, Args ...));
   
   template<class T = void>
   [[jsbind::jsbind("()=>(fn)=>(...args)=>memory.table.get(fn)(addr, ...args)")]]
-  [[clang::import_module("jsbind")]]
   static __externref_t create_js(R(*)(Args ...));
   
   static R erased_invoke(erased *f, Args ...args) {
@@ -348,7 +335,6 @@ private:
   
   template<class T = void>
   [[jsbind::jsbind("()=>(fn, ...args)=>fn(...args)")]]
-  [[clang::import_module("jsbind")]]
   static R invoke(__externref_t, Args ...);
 
   static __externref_t create_erased(auto &&f) {

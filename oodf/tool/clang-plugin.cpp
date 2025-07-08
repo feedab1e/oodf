@@ -46,12 +46,15 @@ struct defer{
 struct jsbind_consume: clang::SemaConsumer {
   std::shared_ptr<std::stringstream> out_file = std::make_shared<std::stringstream>();
   std::string data;
+  std::optional<std::string> import_module;
   clang::Sema *s;
   std::optional<clang::PrintingPolicy> human_fn_name;
   clang::QualType str_type;
   std::unique_ptr<clang::ItaniumMangleContext> mangle_ctx;
 
-  jsbind_consume(std::ofstream path, diags diag){}
+  jsbind_consume(std::ofstream path, diags diag, std::optional<std::string> import_module):
+    import_module{std::move(import_module)}
+  {}
 
   void InitializeSema(clang::Sema &s) override {
     this->s = &s;
@@ -127,46 +130,50 @@ struct jsbind_consume: clang::SemaConsumer {
   }
 
   void handle(clang::FunctionDecl *d) {
+    if(!non_template_p(d)) return;
     auto attr_it = has_appropriate_attr(d);
     if(attr_it == d->getAttrs().end()) return;
-    if(!non_template_p(d)) return;
-    auto attr = dyn_cast<clang::AnnotateAttr>(*attr_it);
-    defer _{[&]{
-        d->getAttrs().erase(attr_it);
-    }};
-
-    bool fail = false;
-    clang::Expr *arg = attr->args_begin()[0];
-    auto str = evaluate_str(arg, attr->getAnnotation() == "__jsbind_dep");
-    if (!str) {
-      diag.de->Report(arg->getExprLoc(), diag.body_not_string);
-      fail = true;
-    }
     auto name = mangle(d);
-    d->addAttr(clang::WebAssemblyImportNameAttr::Create(s->Context, name));
-    auto deps_rg = 
-      attr->args()
-      | std::views::drop(1)
-      | std::views::transform([this, &fail, d](clang::Expr *arg) {
-        auto decl = evaluate_decl(arg);
-        decl->markUsed(d->getASTContext());
-        if (decl) return mangle(decl);
-        fail = true;
-        return std::string{};
-      });
-    std::vector<std::string> deps(std::begin(deps_rg), std::end(deps_rg));
+    {
+      auto attr = dyn_cast<clang::AnnotateAttr>(*attr_it);
+      defer _{[&]{
+          d->getAttrs().erase(attr_it);
+      }};
 
-    if(!fail) {
-      write(name);
-      write(make_human_name(d));
-      write(*str);
-      write(size(deps));
-      for(auto &&dep: deps) {
-        write(dep);
+      bool fail = false;
+      clang::Expr *arg = attr->args_begin()[0];
+      auto str = evaluate_str(arg, attr->getAnnotation() == "__jsbind_dep");
+      if (!str) {
+        diag.de->Report(arg->getExprLoc(), diag.body_not_string);
+        fail = true;
       }
-      if(trace)
-        std::println(std::cerr, "\"{}\", \"{}\"", *str, size(deps));
+      auto deps_rg = 
+        attr->args()
+        | std::views::drop(1)
+        | std::views::transform([this, &fail, d](clang::Expr *arg) {
+          auto decl = evaluate_decl(arg);
+          decl->markUsed(d->getASTContext());
+          if (decl) return mangle(decl);
+          fail = true;
+          return std::string{};
+        });
+      std::vector<std::string> deps(std::begin(deps_rg), std::end(deps_rg));
+
+      if(!fail) {
+        write(name);
+        write(make_human_name(d));
+        write(*str);
+        write(size(deps));
+        for(auto &&dep: deps) {
+          write(dep);
+        }
+        if(trace)
+          std::println(std::cerr, "\"{}\", \"{}\"", *str, size(deps));
+      }
     }
+    d->addAttr(clang::WebAssemblyImportNameAttr::Create(s->Context, name));
+    if(!!import_module)
+      d->addAttr(clang::WebAssemblyImportModuleAttr::Create(s->Context, *import_module));
   }
 
   void HandleCXXImplicitFunctionInstantiation(
@@ -222,11 +229,16 @@ struct jsbind_consume: clang::SemaConsumer {
 
   struct action: clang::PluginASTAction {
     std::string out_path;
+      std::optional<std::string> import_module;
   protected:
     std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(
       clang::CompilerInstance &CI, llvm::StringRef
     ) override {
-      auto jsbind = std::make_unique<jsbind_consume>(std::ofstream{out_path, std::ios::binary | std::ios::trunc}, diag);
+      auto jsbind = std::make_unique<jsbind_consume>(
+        std::ofstream{out_path, std::ios::binary | std::ios::trunc},
+        diag,
+        import_module
+      );
       CI.getCodeGenOpts().PassBuilderCallbacks.push_back([c=jsbind->out_file](llvm::PassBuilder &pb){
         pb.registerPipelineStartEPCallback([c](llvm::ModulePassManager &mpm, llvm::OptimizationLevel) {
           mpm.addPass(jsbind_consume::inject_wasm_section{c});
@@ -249,10 +261,14 @@ struct jsbind_consume: clang::SemaConsumer {
       diag.body_not_string = diag.de->getCustomDiagID(DE::Error, "JavaScript body is not a null-terminated string");
       diag.dep_not_global_lvalue = diag.de->getCustomDiagID(DE::Error, "JavaScript body cannot depend on non-globals");
       
+
       constexpr static char file_path_arg[] = "out-file-path=";
       bool fail = false;
       for (std::string_view arg: args) {
-        if (arg == "trace")
+        if (std::string_view pfx = "import-mod="; arg.starts_with(pfx)) {
+          import_module = arg.substr(size(pfx));
+        }
+        else if (arg == "trace")
           trace = 1;
         else {
           diag.de->Report(diag.unknown_argument) << arg;

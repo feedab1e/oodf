@@ -4,7 +4,6 @@
 using namespace oodf::js;
 
 [[jsbind::jsbind("()=>()=>({})")]]
-[[clang::import_module("jsbind")]]
 __externref_t get();
 
 int main() {

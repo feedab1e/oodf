@@ -2,7 +2,6 @@
 
 template<class = int>
 [[jsbind::jsbind(("()=>()=>{throw 'employment jumpscare';}"))]]
-[[clang::import_module("jsbind")]]
 [[noreturn]] void bail();
 
 extern "C" void __imported_wasi_snapshot_preview1_proc_exit(int) {
