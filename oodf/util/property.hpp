@@ -31,9 +31,12 @@ struct property{
         return this->operator*();
     }
     template<auto = 0>
-    property operator=(pt &&v) const requires requires { action.write(get_class(), assoc_field(*this), v); } {
-        action.write(get_class(), assoc_field(type_t<property>{}), v);
-        return *this;
+    property operator=(pt &&v) requires requires {
+      action.write(get_class(), assoc_field(type_t<property>{}), v);
+      requires !std::is_const_v<pt>;
+    } {
+      action.write(get_class(), assoc_field(type_t<property>{}), v);
+      return *this;
     }
 };
 template<auto x>
