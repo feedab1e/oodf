@@ -21,7 +21,8 @@ void run_(__externref_t test, bool success);
 
 future_assert::future_assert(std::string_view name): handle(register_(oodf::js::string(name))) {}
 void future_assert::operator()(bool success) const {
-  run_(handle, success);
+  if(handle)
+    run_(handle, success);
 }
 
 void assert(bool b, std::string_view s) {

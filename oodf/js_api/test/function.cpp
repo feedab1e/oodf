@@ -11,4 +11,5 @@ int main() {
   function([](int a){ assert(a == 1, "simple passing"); })(1);
   assert(function([]{return 1;})() == 1, "simple return");
   assert(function([](int a){return a;})(1) == 1, "arg return");
+  function([s=raii_assert{"function state is destroyed on garbage collection"}]{});
 }

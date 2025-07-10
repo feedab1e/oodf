@@ -6,3 +6,10 @@ struct future_assert {
   future_assert(std::string_view name);
   void operator()(bool success) const;
 };
+struct raii_assert {
+  future_assert x;
+  raii_assert(std::string_view v): x{v} {}
+  ~raii_assert() {
+    x(true);
+  }
+};
