@@ -47,7 +47,7 @@ struct externref {
     return *this;
   }
   externref &operator=(externref &&other) {
-    index = std::exchange(other.index, -1);
+    std::swap(other.index, index);
     return *this;
   }
   externref(): index{-1}{}
