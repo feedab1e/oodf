@@ -1,14 +1,30 @@
 #pragma once
 #include <new>
+#include <coroutine>
 #include <cstdlib>
 #include <string>
 #include <concepts>
 #include "oodf/util/types.hpp"
 namespace oodf::js {
 
+struct externref;
+
 namespace binds {
 template<class T>
-concept js_type = std::integral<T> || std::same_as<T, __externref_t> || std::is_pointer_v<T>;
+concept js_regular_primitive = std::is_pointer_v<T>
+  || std::integral<T>
+  || std::floating_point<T>;
+template<class T>
+concept js_primitive = std::same_as<T, __externref_t>
+  || js_regular_primitive<T>;
+
+template<class T>
+concept js_object = std::derived_from<std::remove_cvref_t<T>, externref>
+  && std::convertible_to<std::remove_cvref_t<T>, __externref_t>
+  && std::constructible_from<std::remove_cvref_t<T>, __externref_t>;
+
+template<class T>
+concept js_type = js_primitive<T> || js_object<T>;
 }
 
 namespace impl {
@@ -70,7 +86,7 @@ struct externref::setter_wrapper {
 __externref_t make_raw(std::derived_from<externref> auto v) {
   return v;
 }
-auto make_raw(binds::js_type auto v) {
+auto make_raw(binds::js_primitive auto v) {
   return v;
 }
 
@@ -119,10 +135,10 @@ template<class R = int>
 [[jsbind::jsbind("()=>(b)=>b")]]
 R encode_int(__externref_t);
 
-template<js_type value_t = __externref_t, js_type idx_t = int>
+template<js_primitive value_t = __externref_t, js_primitive idx_t = int>
 [[jsbind::jsbind("()=>(arr, idx)=>arr[idx]")]]
 value_t externref_get(__externref_t, idx_t);
-template<js_type value_t = __externref_t, js_type idx_t = int>
+template<js_primitive value_t = __externref_t, js_primitive idx_t = int>
 [[jsbind::jsbind("()=>(arr, idx, v)=>{ old = arr[idx]; arr[idx]=v; return old; }")]]
 void externref_set(__externref_t, idx_t, value_t);
 }
@@ -246,7 +262,7 @@ inline externref::setter_wrapper externref::operator[](int r) {
 }
 namespace binds {
 
-template<js_type ...args>
+template<js_primitive ...args>
 [[jsbind::jsbind("()=>(...arr)=>arr")]]
 __externref_t create_array(args ...);
 }
@@ -353,5 +369,138 @@ function(Fn) -> function<
     typename util::memptr_traits<decltype(&Fn::operator())>::value_type
   >::fn_type
 >;
+
+template<class R>
+struct promise;
+
+namespace impl {
+
+template<class T>
+struct converter {
+  using storage_type = T *;
+  using return_type = T *;
+  static T get(const storage_type &s) { return *s; }
+  static void set(storage_type &s, return_type r) { s = r; }
+};
+template<binds::js_regular_primitive T>
+struct converter<T> {
+  using storage_type = T;
+  using return_type = T;
+  static T get(const storage_type &s) { return s; }
+  static void set(storage_type &s, return_type r) { s = r; }
+};
+template<class T> requires binds::js_object<T> || std::same_as<T, __externref_t>
+struct converter<T> {
+  using storage_type = externref;
+  using return_type = __externref_t;
+  static T get(const storage_type &s) { return (__externref_t)s; }
+  static void set(storage_type &s, return_type r) { s = r; }
+};
+template<>
+struct converter<void> {
+  struct storage_type{};
+  using return_type = __externref_t;
+  static void get(const storage_type &s) { return; }
+  static void set(storage_type &s, return_type r) {}
+};
+
+template<class T>
+void resume_continuation(
+    void *coro,
+    typename converter<T>::storage_type *p,
+    typename converter<T>::return_type r
+) {
+  converter<T>::set(*p, r);
+  std::coroutine_handle<>::from_address(coro)();
+}
+
+template<class T>
+[[jsbind::jsbind(
+  "()=>(promise, coro_addr, return_value, resume_fn)=>{"
+  "  promise.then((data)=>"
+  "    memory.table.get(resume_fn)(coro_addr, return_value, data)"
+  "  );"
+  "}"
+)]]
+extern void promise_set_continuation(
+  __externref_t,
+  void *,
+  typename converter<T>::storage_type *,
+  decltype(resume_continuation<T>) * = resume_continuation<T>
+);
+
+}
+
+template<class R> requires binds::js_primitive<R> || std::copyable<R> || std::same_as<R, void>
+struct promise<R>: externref {
+  struct awaiter {
+    externref coro;
+    typename impl::converter<R>::storage_type return_expr = {};
+    constexpr bool await_ready() const { return false; }
+    constexpr void await_suspend(std::coroutine_handle<> h) {
+      impl::promise_set_continuation<R>(coro, h.address(), &return_expr);
+    }
+    R await_resume() const {
+      return impl::converter<R>::get(return_expr);
+    }
+  };
+  awaiter operator co_await() const {
+    return {*this};
+  }
+  using externref::externref;
+};
+
+namespace impl {
+
+template<class = void>
+[[jsbind::jsbind("()=>()=>Promise.withResolvers()")]]
+__externref_t create_promise();
+template<class = void>
+[[jsbind::jsbind("()=>(x)=>x.promise")]]
+__externref_t get_promise(__externref_t);
+template<class = void>
+[[jsbind::jsbind("()=>(x)=>x.resolve")]]
+__externref_t get_resolve(__externref_t);
+template<class T>
+[[jsbind::jsbind("()=>(resolve, v)=>resolve(v)")]]
+__externref_t invoke_resolve(__externref_t, T);
+template<class T = void>
+[[jsbind::jsbind("()=>(resolve)=>resolve()")]]
+__externref_t invoke_resolve(__externref_t);
+
+}
+
+template<class R>
+struct coro_promise: promise<R> {
+  struct promise_type;
+  struct inject_void {
+    void return_void() noexcept {
+      auto pthis = static_cast<const promise_type *>(this);
+      impl::invoke_resolve(pthis->resolve);
+    }
+  };
+  struct inject_value {
+    void return_value(R v) noexcept {
+      auto pthis = static_cast<const promise_type *>(this);
+      impl::invoke_resolve(pthis->resolve, v);
+    }
+  };
+  struct promise_type: std::conditional_t<
+      std::same_as<R, void>,
+      inject_void,
+      inject_value
+    >
+  {
+    externref resolve;
+    coro_promise get_return_object() {
+      __externref_t promise = impl::create_promise();
+      resolve = impl::get_resolve(promise);
+      return {impl::get_promise(promise)};
+    }
+    constexpr std::suspend_never initial_suspend() const noexcept { return {}; }
+    constexpr std::suspend_always final_suspend() const noexcept { return {}; }
+    void unhandled_exception() {};
+  };
+};
 
 }

@@ -1,8 +1,8 @@
 all: frontend
 
 test: frontend
-	cmake --build build/frontend --target test_basic --target test_fail --target test_function
-	ctest --test-dir build/frontend --rerun-failed --output-on-failure 
+	cmake --build build/frontend --target test_basic --target test_fail --target test_function --target test_promise
+	ctest --test-dir build/frontend --output-on-failure 
 
 frontend: tool
 	cmake --toolchain ${PWD}/build/tool/tool/JsBindToolchain.cmake -B build/frontend -S oodf
