@@ -6,11 +6,9 @@ const goyda = <T extends ArrayBufferLike>(r: Buffer<T>) => new Response(r, {head
 
 const wasmExperiment = async () => {
   let f = path.resolve(process.argv[2]);
-  console.log(f);
   let mod = await WebAssembly.compileStreaming(fs.promises.readFile(f, {encoding: null}).then(goyda));
   let jsbind = new JsBindCtx(mod);
   let env = jsbind.getBindings();
-  console.log(env);
   for (let imp of WebAssembly.Module.imports(mod)) {
     if(imp.module == 'env')
       console.error(imp.name);
@@ -22,6 +20,18 @@ const wasmExperiment = async () => {
     instance.exports
   );
 
+  (global as any).tests = [];
+  process.on('exit', ()=>{
+    let arr: {name: string, status: 'dnf'|'success'|'fail'}[] = (global as any).tests;
+    let fail = false;
+    for (let {name, status} of arr)
+      if (status != 'success') {
+        fail = true;
+        console.error(`test "${name}" ${status == 'dnf' ? 'didn\'t run' : 'failed'}`);
+      }
+      if (fail)
+        process.exit(1);
+  });
   (instance.exports._start as Function)();
 }
 wasmExperiment();
